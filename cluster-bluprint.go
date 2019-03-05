@@ -31,7 +31,7 @@ func main() {
 
 	fmt.Println("Cluster Blueprint started.")
 
-	kubeconfig := "/home/elis/.kube/kubeconfig.conf"
+	kubeconfig := "/home/elis/.kube/config"
 
 	// use the current context in kubeconfig
 	config, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
