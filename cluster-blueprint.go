@@ -1,9 +1,10 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
+	"os"
 
-	meta_v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 
 	//"k8s.io/client-go/rest"
@@ -46,16 +47,20 @@ func main() {
 	}
 
 	//	Get all Deployments
-	deploymentsClient := clientset.AppsV1().Deployments(meta_v1.NamespaceAll)
+	//deploymentsClient := clientset.AppsV1().Deployments(meta_v1.NamespaceAll)
 
-	deploymentsList, err := deploymentsClient.List(meta_v1.ListOptions{})
+	/*deploymentsList, err := deploymentsClient.List(meta_v1.ListOptions{})
 	if err != nil {
 		fmt.Println("Could not list deployments:", err)
 		return
-	}
+	}*/
 
-	for _, deployment := range deploymentsList.Items {
+	/*for _, deployment := range deploymentsList.Items {
 		fmt.Println("Deployment:", deployment.Name, "on", deployment.Namespace)
-	}
+	}*/
 
+	reader := bufio.NewReader(os.Stdin)
+	fmt.Print("Enter text: ")
+	text, _ := reader.ReadString('\n')
+	fmt.Println("input", text)
 }
