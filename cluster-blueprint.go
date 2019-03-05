@@ -1,7 +1,11 @@
 package main
 
 import (
+	"bufio"
+	"errors"
 	"fmt"
+	"os"
+	"strings"
 
 	types_core_v1 "k8s.io/client-go/kubernetes/typed/core/v1"
 
@@ -36,6 +40,7 @@ var (
 	deploymentsClient types_app_v1.DeploymentInterface
 	serviceClient     types_core_v1.ServiceInterface
 	nodePortRange     = []int32{int32(30000), int32(32767)}
+	data              Data
 
 	stop bool
 )
@@ -69,31 +74,33 @@ func main() {
 	}
 
 	//	The clients
-	/*deploymentsClient = clientset.AppsV1().Deployments(meta_v1.NamespaceAll)
-	serviceClient = clientset.CoreV1().Services(meta_v1.NamespaceAll)*/
 	deploymentsClient = clientset.AppsV1().Deployments(meta_v1.NamespaceDefault)
 	serviceClient = clientset.CoreV1().Services(meta_v1.NamespaceDefault)
 
-	/*deploymentsList, err := deploymentsClient.List(meta_v1.ListOptions{})
-	if err != nil {
-		fmt.Println("Could not list deployments:", err)
-		return
-	}*/
+	//	The data
+	data = Data{}
 
-	/*for _, deployment := range deploymentsList.Items {
-		fmt.Println("Deployment:", deployment.Name, "on", deployment.Namespace)
-	}*/
+	//	Start
+	cmd := ""
+	reader := bufio.NewReader(os.Stdin)
+	for cmd != "exit" {
+		fmt.Println("Enter commands.")
+		cmd, _ = reader.ReadString('\n')
+		cmd = strings.TrimRight(cmd, "\r\n")
+		params := strings.Split(cmd, " ")
 
-	data := Data{}
-	/*cmd := ""
+		switch params[0] {
+		case "add":
+			d, err := getDeployment(params)
+			if err == nil {
+				data.Deployments = append(data.Deployments, d)
+			}
 
-	fmt.Println("Enter commands.")
-	reader := bufio.NewReader(os.Stdin)*/
-	d, err := getDeployment([]string{})
-	if err == nil {
-		data.Deployments = append(data.Deployments, d)
+		case "go":
+			deploy()
+		}
 	}
-	deploy(data)
+
 	/*for cmd != "exit" {
 
 		cmd, _ = reader.ReadString('\n')
@@ -114,18 +121,28 @@ func main() {
 
 func generateRandomPort() int32 {
 	rand.Seed(time.Now().UnixNano())
-	return rand.Int31n(nodePortRange[1]-nodePortRange[1]) + nodePortRange[0]
+	return rand.Int31n(nodePortRange[1]-nodePortRange[0]) + nodePortRange[0]
 }
 
 func getDeployment(params []string) (DepSer, error) {
 
+	if len(params) != 4 {
+		fmt.Println("Not enough parameters")
+		return DepSer{}, errors.New("Not enough parameters")
+	}
+
+	oneReplica := int32(1)
+	image := params[2]
+	name := params[3]
+
 	//	Generate a random port number
-	portNumber := generateRandomPort()
+	//portNumber := generateRandomPort()
+	portNumber := int32(80)
 
 	//	Do the service
 	service := core_v1.Service{
 		ObjectMeta: meta_v1.ObjectMeta{
-			Name:      "mysql",
+			Name:      name,
 			Namespace: "default",
 		},
 		Spec: core_v1.ServiceSpec{
@@ -135,76 +152,88 @@ func getDeployment(params []string) (DepSer, error) {
 				},
 			},
 			Selector: map[string]string{
-				"app": "mysql",
+				"app": name,
 			},
 			ClusterIP: "",
 		},
 	}
-	/*deployment := apps_v1.Deployment{
+
+	//	Do the deployment
+	deployment := apps_v1.Deployment{
 		ObjectMeta: meta_v1.ObjectMeta{
-			Name:      "mysql",
+			Name:      name,
 			Namespace: "default",
 			Labels: map[string]string{
-				"app": "mysql",
+				"app": name,
 			},
 		},
 		Spec: apps_v1.DeploymentSpec{
+			Selector: &meta_v1.LabelSelector{
+				MatchLabels: map[string]string{
+					"app": name,
+				},
+			},
 			Replicas: &oneReplica,
 			Template: core_v1.PodTemplateSpec{
 				ObjectMeta: meta_v1.ObjectMeta{
-					Name:      "mysql",
+					Name:      name,
 					Namespace: "default",
+					Labels: map[string]string{
+						"app": name,
+					},
 				},
 				Spec: core_v1.PodSpec{
 					Containers: []core_v1.Container{
 						core_v1.Container{
-							Image: "mysql",
-							Name:  "mysql",
+							Image:           image,
+							Name:            name,
+							ImagePullPolicy: core_v1.PullAlways,
 							Ports: []core_v1.ContainerPort{
 								core_v1.ContainerPort{
-									ContainerPort: 3306,
-									Name:          "mysql",
+									ContainerPort: portNumber,
+									Name:          name,
 								},
 							},
-							VolumeMounts: []core_v1.VolumeMount{
+							/*VolumeMounts: []core_v1.VolumeMount{
 								core_v1.VolumeMount{
 									Name:      name + "-persistent-storage",
 									MountPath: "/var/lib/" + name,
 								},
-							},
+							},*/
 						},
 					},
-					Volumes: []core_v1.Volume{
+					/*Volumes: []core_v1.Volume{
 						core_v1.Volume{
 							Name: name + "-persistent-storage",
 						},
-					},
+					},*/
 				},
 			},
 		},
-	}*/
+	}
 	d := DepSer{
-		//Deployment: deployment,
-		Service: service,
+		Deployment: deployment,
+		Service:    service,
 	}
 
 	return d, nil
 }
 
-func deploy(data Data) {
+func deploy() {
 	fmt.Println("deploying...")
 	for _, deployments := range data.Deployments {
 		//	Deploy the service
 		if _, err := serviceClient.Create(&deployments.Service); err != nil {
-			fmt.Println("Error in deploy service:", err.Error())
+			fmt.Println("Error in deploy service", deployments.Service.Name, ":", err.Error())
 		} else {
-			fmt.Println("Service Deployed!")
+			fmt.Println("Service", deployments.Service.Name, "deployed!")
 		}
-		/*fmt.Println("deployment:", deployments.Deployment.Name)
-		if result, err := deploymentsClient.Create(&deployments.Deployment); err != nil {
-			fmt.Println("ERROR:", err.Error())
+
+		//	Deploy the deployment
+		if _, err := deploymentsClient.Create(&deployments.Deployment); err != nil {
+			fmt.Println("Error in deploy deployment", deployments.Deployment.Name, ":", err.Error())
 		} else {
-			fmt.Println("ok", result)
-		}*/
+			fmt.Println("Deployment", deployments.Deployment.Name, "deployed!")
+		}
 	}
 }
